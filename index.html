@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MedRoute — Symptom Triage &amp; Specialist Booking Assistant</title>
+<style>
+  :root {
+    --bg-0: #060d17;
+    --bg-1: #0a1524;
+    --glass: rgba(255,255,255,.045);
+    --glass-2: rgba(255,255,255,.08);
+    --stroke: rgba(255,255,255,.09);
+    --stroke-hi: rgba(255,255,255,.18);
+    --teal: #2dd4bf;
+    --teal-soft: rgba(45,212,191,.14);
+    --teal-glow: rgba(45,212,191,.35);
+    --cyan: #22d3ee;
+    --violet: #a78bfa;
+    --amber: #fbbf24;
+    --rose: #fb7185;
+    --green: #34d399;
+    --red: #f87171;
+    --text: #e8eef6;
+    --text-2: #a7b4c7;
+    --text-3: #6b7c93;
+    --r-lg: 20px;
+    --r-md: 14px;
+    --r-sm: 10px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg-0); color: var(--text); min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Ambient aurora background ─────────────────────────── */
+  .aurora { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .aurora::before, .aurora::after {
+    content: ""; position: absolute; width: 60vw; height: 60vw; border-radius: 50%;
+    filter: blur(120px); opacity: .16;
+  }
+  .aurora::before { background: #2dd4bf; top: -25vw; right: -15vw; animation: drift 26s ease-in-out infinite alternate; }
+  .aurora::after  { background: #6366f1; bottom: -30vw; left: -20vw; animation: drift 32s ease-in-out infinite alternate-reverse; }
+  @keyframes drift {
+    0%   { transform: translate(0,0) scale(1); }
+    100% { transform: translate(6vw,4vh) scale(1.15); }
+  }
+  .grid-lines {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .5;
+    background-image:
+      linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 40%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 40%, transparent 100%);
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  header {
+    position: sticky; top: 0; z-index: 60;
+    background: rgba(6,13,23,.72); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid var(--stroke);
+    padding: 14px 28px; display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .logo {
+    width: 44px; height: 44px; border-radius: 14px; position: relative;
+    background: linear-gradient(135deg, #2dd4bf, #0ea5e9);
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+    box-shadow: 0 0 24px var(--teal-glow), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .logo::after {
+    content: ""; position: absolute; inset: -3px; border-radius: 17px;
+    background: linear-gradient(135deg, rgba(45,212,191,.5), transparent 60%);
+    filter: blur(8px); z-index: -1;
+  }
+  .brand h1 {
+    font-size: 1.3rem; font-weight: 800; letter-spacing: -.02em;
+    background: linear-gradient(90deg, #fff, #9adfd6);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .brand small { display: block; font-size: .7rem; color: var(--text-3); font-weight: 500; letter-spacing: .04em; }
+  .seg {
+    display: flex; background: var(--glass); border: 1px solid var(--stroke);
+    border-radius: 13px; padding: 4px; gap: 4px;
+  }
+  .seg button {
+    border: none; background: transparent; color: var(--text-2); padding: 9px 20px;
+    border-radius: 9px; cursor: pointer; font-size: .84rem; font-weight: 600;
+    transition: all .2s; display: flex; align-items: center; gap: 7px;
+  }
+  .seg button:hover { color: var(--text); }
+  .seg button.active {
+    background: linear-gradient(135deg, var(--teal), #0ea5e9); color: #042220;
+    box-shadow: 0 2px 16px var(--teal-glow);
+  }
+
+  /* ── Disclaimer (BR-2) ──────────────────────────────────── */
+  .notice {
+    position: relative; z-index: 1; text-align: center; font-size: .76rem; font-weight: 600;
+    color: #fcd9a0; background: linear-gradient(90deg, transparent, rgba(245,158,11,.12), transparent);
+    border-bottom: 1px solid rgba(245,158,11,.18); padding: 8px 20px;
+  }
+  .notice b { color: var(--amber); }
+
+  /* ── Layout ──────────────────────────────────────────────── */
+  .wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 26px 20px 70px; }
+  .panel-title {
+    font-size: .74rem; font-weight: 800; color: var(--text-3); margin: 22px 0 12px;
+    text-transform: uppercase; letter-spacing: .14em; display: flex; align-items: center; gap: 10px;
+  }
+  .panel-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--stroke), transparent); }
+
+  .patient-grid { display: grid; grid-template-columns: 1fr 350px; gap: 22px; align-items: start; }
+  @media (max-width: 940px) { .patient-grid { grid-template-columns: 1fr; } }
+
+  /* ── Glass card base ────────────────────────────────────── */
+  .glass {
+    background: var(--glass); border: 1px solid var(--stroke); border-radius: var(--r-lg);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+
+  /* ── Chat card ──────────────────────────────────────────── */
+  .chat-card { display: flex; flex-direction: column; height: 684px; overflow: hidden; }
+  .chat-head {
+    padding: 15px 20px; border-bottom: 1px solid var(--stroke);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .bot-avatar {
+    width: 40px; height: 40px; border-radius: 13px; flex-shrink: 0;
+    background: linear-gradient(135deg, rgba(45,212,191,.25), rgba(34,211,238,.15));
+    border: 1px solid rgba(45,212,191,.3);
+    display: flex; align-items: center; justify-content: center; font-size: 19px;
+    box-shadow: 0 0 14px rgba(45,212,191,.2);
+  }
+  .chat-head h2 { font-size: .98rem; font-weight: 700; letter-spacing: -.01em; }
+  .chat-head small { color: var(--text-3); font-size: .72rem; display: flex; align-items: center; gap: 6px; }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  .icon-btn {
+    margin-left: auto; background: var(--glass-2); border: 1px solid var(--stroke);
+    color: var(--text-2); padding: 8px 14px; border-radius: 10px; cursor: pointer;
+    font-size: .78rem; font-weight: 700; transition: all .2s;
+  }
+  .icon-btn:hover { border-color: var(--teal); color: var(--teal); }
+
+  /* ── Triage stepper ─────────────────────────────────────── */
+  .stepper { display: flex; gap: 6px; padding: 12px 20px 4px; }
+  .step {
+    flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,.08);
+    position: relative; overflow: hidden; transition: background .3s;
+  }
+  .step::after {
+    content: ""; position: absolute; inset: 0; border-radius: 4px;
+    background: linear-gradient(90deg, var(--teal), var(--cyan));
+    transform: scaleX(0); transform-origin: left; transition: transform .5s ease;
+  }
+  .step.done::after, .step.on::after { transform: scaleX(1); }
+  .step.on::after { animation: stepGlow 1.6s ease-in-out infinite; }
+  @keyframes stepGlow { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+
+  /* ── Chat log ───────────────────────────────────────────── */
+  #chat-log { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 13px; }
+  #chat-log::-webkit-scrollbar { width: 5px; }
+  #chat-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 4px; }
+  #chat-log::-webkit-scrollbar-thumb:hover { background: var(--teal); }
+
+  .msg {
+    max-width: 82%; padding: 12px 16px; font-size: .9rem; line-height: 1.55;
+    border-radius: 16px; animation: rise .3s cubic-bezier(.21,1.02,.73,1);
+  }
+  .msg.bot {
+    background: linear-gradient(180deg, rgba(45,212,191,.13), rgba(34,211,238,.08));
+    border: 1px solid rgba(45,212,191,.22); color: #d3f3ee;
+    border-bottom-left-radius: 5px; align-self: flex-start;
+  }
+  .msg.bot b { color: #7ff0e0; }
+  .msg.user {
+    background: linear-gradient(135deg, var(--teal), #0ea5e9); color: #042220;
+    font-weight: 600; border-bottom-right-radius: 5px; align-self: flex-end;
+    box-shadow: 0 4px 18px rgba(45,212,191,.25);
+  }
+  .msg.system {
+    background: rgba(167,139,250,.1); border: 1px solid rgba(167,139,250,.25); color: #cfc4f5;
+    font-size: .76rem; align-self: center; text-align: center; border-radius: 11px;
+  }
+  .msg.emergency {
+    background: linear-gradient(180deg, rgba(248,113,113,.16), rgba(248,113,113,.07));
+    border: 1px solid rgba(248,113,113,.45); color: #ffd9d9;
+    border-radius: 16px; align-self: flex-start; max-width: 92%;
+    box-shadow: 0 0 30px rgba(248,113,113,.15);
+  }
+  .msg.emergency strong { display: block; font-size: 1.02rem; margin-bottom: 6px; color: var(--red); letter-spacing: .02em; }
+  .msg.emergency b { color: #ffb4b4; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+
+  .typing { display: flex; gap: 5px; padding: 13px 16px; align-self: flex-start; }
+  .typing span { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); animation: blink 1.1s infinite; box-shadow: 0 0 6px var(--teal-glow); }
+  .typing span:nth-child(2) { animation-delay: .18s; }
+  .typing span:nth-child(3) { animation-delay: .36s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+  /* ── Quick replies ──────────────────────────────────────── */
+  .quick-replies { display: flex; flex-wrap: wrap; gap: 9px; padding: 14px 20px; border-top: 1px solid var(--stroke); min-height: 62px; }
+  .qr-btn {
+    border: 1px solid rgba(45,212,191,.4); background: rgba(45,212,191,.07); color: #8fecdf;
+    padding: 10px 18px; border-radius: 999px; cursor: pointer; font-size: .84rem; font-weight: 600;
+    transition: all .18s; animation: rise .3s cubic-bezier(.21,1.02,.73,1);
+  }
+  .qr-btn:hover { background: var(--teal); color: #042220; box-shadow: 0 4px 20px var(--teal-glow); transform: translateY(-1px); }
+  .qr-btn.danger { border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.09); color: #fca5a5; }
+  .qr-btn.danger:hover { background: var(--red); color: #2b0505; box-shadow: 0 4px 20px rgba(248,113,113,.4); }
+  .qr-btn.ghost { border-color: var(--stroke); background: var(--glass-2); color: var(--text-2); }
+
+  .name-box { align-self: flex-end; width: 82%; }
+  .name-box input {
+    width: 100%; padding: 12px 16px; border-radius: 14px; font-size: .9rem;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(45,212,191,.35);
+    color: var(--text); outline: none; transition: all .2s;
+  }
+  .name-box input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(45,212,191,.15); }
+  .name-box input::placeholder { color: var(--text-3); }
+
+  /* ── Doctor cards ────────────────────────────────────────── */
+  .doctor-card {
+    border: 1px solid var(--stroke); border-radius: var(--r-md); padding: 14px 16px;
+    background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+    display: flex; align-items: center; gap: 14px; width: 100%; cursor: pointer;
+    transition: all .2s; position: relative; overflow: hidden;
+  }
+  .doctor-card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, var(--teal), var(--cyan));
+    opacity: 0; transition: opacity .2s;
+  }
+  .doctor-card:hover {
+    border-color: rgba(45,212,191,.45); transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(45,212,191,.12); background: linear-gradient(180deg, rgba(45,212,191,.07), rgba(255,255,255,.02));
+  }
+  .doctor-card:hover::before { opacity: 1; }
+  .doc-avatar {
+    width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, #2dd4bf, #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: .92rem; color: #06131f;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .doctor-card .info { flex: 1; min-width: 0; }
+  .doctor-card .info h4 { font-size: .9rem; font-weight: 700; letter-spacing: -.01em; }
+  .doctor-card .info small { color: var(--text-3); font-size: .75rem; display: block; margin-top: 3px; }
+  .slot-pill {
+    background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.3);
+    font-size: .72rem; font-weight: 700; padding: 6px 11px; border-radius: 8px; white-space: nowrap;
+  }
+
+  /* ── Bookings sidebar ───────────────────────────────────── */
+  .side-card { padding: 18px; max-height: 684px; overflow-y: auto; }
+  .side-card::-webkit-scrollbar { width: 5px; }
+  .side-card::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 4px; }
+  .side-card h3 { font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
+  .side-card p.sub { font-size: .74rem; color: var(--text-3); margin: 4px 0 14px; line-height: 1.5; }
+  .booking {
+    border: 1px solid var(--stroke); border-radius: var(--r-md); padding: 14px; margin-bottom: 12px;
+    background: rgba(255,255,255,.03); transition: border-color .2s;
+  }
+  .booking:hover { border-color: var(--stroke-hi); }
+  .booking .bk-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .booking h4 { font-size: .86rem; font-weight: 700; }
+  .booking small { color: var(--text-3); font-size: .72rem; display: block; margin-top: 3px; }
+  .booking small.warn-line { color: var(--amber); }
+  .chip {
+    font-size: .64rem; font-weight: 800; padding: 5px 10px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: .08em; white-space: nowrap;
+  }
+  .chip.pending { background: rgba(167,139,250,.14); color: var(--violet); border: 1px solid rgba(167,139,250,.35); }
+  .chip.confirmed { background: rgba(52,211,153,.13); color: var(--green); border: 1px solid rgba(52,211,153,.35); }
+  .chip.referred { background: rgba(251,191,36,.13); color: var(--amber); border: 1px solid rgba(251,191,36,.35); }
+  .bk-history { margin-top: 10px; border-top: 1px dashed rgba(255,255,255,.12); padding-top: 9px; }
+  .bk-history small { line-height: 1.8; color: var(--text-3); }
+  .bk-history small b { color: var(--text-2); font-weight: 600; }
+  .empty-note { color: var(--text-3); font-size: .8rem; text-align: center; padding: 22px 8px; line-height: 1.6; }
+
+  /* ── Doctor dashboard ────────────────────────────────────── */
+  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 6px; }
+  .stat { padding: 18px 20px; position: relative; overflow: hidden; }
+  .stat::after {
+    content: ""; position: absolute; right: -20px; top: -20px; width: 90px; height: 90px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(45,212,191,.14), transparent 70%);
+  }
+  .stat .num { font-size: 1.9rem; font-weight: 800; letter-spacing: -.03em;
+    background: linear-gradient(90deg, #fff, #9adfd6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .stat .lbl { font-size: .68rem; color: var(--text-3); font-weight: 700; text-transform: uppercase; letter-spacing: .1em; margin-top: 3px; }
+
+  .doc-select-card { padding: 18px 20px; margin: 16px 0; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .doc-select-card label { font-weight: 700; font-size: .86rem; color: var(--text-2); }
+  select {
+    padding: 11px 15px; border-radius: 11px; font-size: .86rem; font-weight: 600;
+    background: rgba(255,255,255,.05); border: 1px solid var(--stroke-hi);
+    color: var(--text); min-width: 330px; cursor: pointer; transition: border-color .2s;
+  }
+  select:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(45,212,191,.12); }
+  select option { background: #0d1a2b; color: var(--text); }
+  .doc-select-card small { color: var(--text-3); font-size: .73rem; }
+
+  .req-card { padding: 20px; margin-bottom: 15px; animation: rise .35s cubic-bezier(.21,1.02,.73,1); }
+  .req-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .req-card h3 { font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
+  .triage-tags { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0; }
+  .triage-tags span {
+    background: rgba(45,212,191,.1); color: #8fecdf; border: 1px solid rgba(45,212,191,.25);
+    font-size: .72rem; font-weight: 700; padding: 5px 12px; border-radius: 999px;
+  }
+  .slot-line { font-size: .88rem; font-weight: 700; color: var(--green); margin-bottom: 5px; }
+  .ref-note { font-size: .76rem; color: var(--text-3); margin-bottom: 14px; }
+  .req-actions { display: flex; gap: 11px; margin-top: 14px; flex-wrap: wrap; }
+  .btn {
+    border: none; border-radius: 12px; padding: 12px 26px; font-size: .86rem; font-weight: 800;
+    cursor: pointer; transition: all .18s; letter-spacing: .01em;
+  }
+  .btn-accept {
+    background: linear-gradient(135deg, #10b981, #059669); color: #fff;
+    box-shadow: 0 4px 18px rgba(16,185,129,.3);
+  }
+  .btn-accept:hover { transform: translateY(-2px); box-shadow: 0 8px 26px rgba(16,185,129,.4); }
+  .btn-refer { background: transparent; color: var(--amber); border: 1.5px solid rgba(251,191,36,.5); }
+  .btn-refer:hover { background: rgba(251,191,36,.12); border-color: var(--amber); transform: translateY(-2px); }
+  .refer-box { display: none; margin-top: 16px; border-top: 1px dashed rgba(255,255,255,.12); padding-top: 16px; }
+  .refer-box.open { display: block; animation: rise .25s ease; }
+  .refer-box label { font-size: .78rem; font-weight: 700; color: var(--text-2); }
+  .refer-box select { margin-top: 10px; }
+  .refer-box .btn { margin-top: 12px; background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; box-shadow: 0 4px 18px rgba(245,158,11,.25); }
+  .chain-alert {
+    background: linear-gradient(90deg, rgba(248,113,113,.15), rgba(248,113,113,.05));
+    border: 1px solid rgba(248,113,113,.4); color: #fda4a4;
+    border-radius: var(--r-sm); padding: 12px 15px; font-size: .78rem; font-weight: 600; margin: 10px 0; line-height: 1.55;
+  }
+  .req-list-empty { padding: 30px; text-align: center; }
+
+  footer {
+    position: relative; z-index: 1; text-align: center; color: var(--text-3);
+    font-size: .74rem; padding: 28px 20px 40px; line-height: 1.8;
+    border-top: 1px solid var(--stroke);
+  }
+  footer b { color: var(--text-2); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="aurora"></div>
+<div class="grid-lines"></div>
+
+<header>
+  <div class="brand">
+    <div class="logo">🩺</div>
+    <div>
+      <h1>MedRoute</h1>
+      <small>Symptom Triage &amp; Specialist Booking Assistant</small>
+    </div>
+  </div>
+  <div class="seg">
+    <button id="tab-patient" class="active" onclick="switchView('patient')">💬 Patient Chat</button>
+    <button id="tab-doctor" onclick="switchView('doctor')">🩺 Doctor Dashboard</button>
+  </div>
+</header>
+
+<div class="notice">
+  ⚠️ MedRoute does not diagnose conditions or recommend treatment — it matches symptoms to a medical specialty and facilitates booking only. Emergencies: call <b>10177</b> or go to your nearest emergency room.
+</div>
+
+<!-- ══════════════════ PATIENT VIEW ══════════════════ -->
+<div class="wrap" id="view-patient">
+  <div class="patient-grid">
+
+    <div class="glass chat-card">
+      <div class="chat-head">
+        <div class="bot-avatar">🤖</div>
+        <div>
+          <h2>MedRoute Assistant</h2>
+          <small><span class="pulse-dot"></span> Online — guided symptom triage</small>
+        </div>
+        <button class="icon-btn" onclick="restartTriage()">↺ Restart</button>
+      </div>
+      <div class="stepper">
+        <div class="step" id="st-1"></div>
+        <div class="step" id="st-2"></div>
+        <div class="step" id="st-3"></div>
+        <div class="step" id="st-4"></div>
+        <div class="step" id="st-5"></div>
+      </div>
+      <div id="chat-log"></div>
+      <div class="quick-replies" id="quick-replies"></div>
+    </div>
+
+    <div>
+      <div class="panel-title">My Bookings</div>
+      <div class="glass side-card">
+        <h3>Booking Status</h3>
+        <p class="sub">Every request stays visible until your doctor acts on it (BR-3).</p>
+        <div id="booking-list"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════ DOCTOR VIEW ══════════════════ -->
+<div class="wrap hidden" id="view-doctor">
+  <div class="stat-row" id="doc-stats"></div>
+
+  <div class="glass doc-select-card">
+    <label>👩‍⚕️ You are viewing as:</label>
+    <select id="doctor-select" onchange="renderDoctorRequests()"></select>
+    <small>Prototype — no authentication in this iteration</small>
+  </div>
+
+  <div class="panel-title">Incoming Booking Requests (UC-02)</div>
+  <div id="request-list"></div>
+</div>
+
+<footer>
+  <b>MedRoute Prototype</b> · Clickatell 1-Month AI Bootcamp — Week 1 · Author: Freddy Thosago · September 2026<br/>
+  Mock data only — no real patient health data is captured or stored. Triage answers exist for the session only.
+</footer>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   MedRoute Prototype — mock data, triage engine, booking marketplace
+   ═══════════════════════════════════════════════════════════════════ */
+
+const SPECIALTIES = {
+  skin:         'Dermatologist',
+  chest:        'Cardiologist',
+  digestive:    'Gastroenterologist',
+  joint:        'Orthopaedic Surgeon',
+  neurological: 'Neurologist',
+  mood:         'Psychiatrist',
+  general:      'General Practitioner'
+};
+
+const CATEGORIES = [
+  { key: 'skin',         label: '🧴 Skin — rash, irritation, spots',      specialty: SPECIALTIES.skin },
+  { key: 'chest',        label: '❤️ Chest / Heart — pain, palpitations', specialty: SPECIALTIES.chest },
+  { key: 'digestive',    label: '🍽️ Digestive — stomach, bowel',        specialty: SPECIALTIES.digestive },
+  { key: 'joint',        label: '🦴 Joint / Bone — pain, stiffness',    specialty: SPECIALTIES.joint },
+  { key: 'neurological', label: '🧠 Neurological — headaches, numbness', specialty: SPECIALTIES.neurological },
+  { key: 'mood',         label: '💛 Mood — stress, anxiety, low mood',   specialty: SPECIALTIES.mood },
+  { key: 'general',      label: '🩹 General — something else',          specialty: SPECIALTIES.general }
+];
+
+/* Emergency red-flag screening (AF-01) — asked before continuing triage */
+const EMERGENCY_SCREENS = {
+  chest: {
+    question: 'Before we continue — are you currently experiencing any of the following with your chest symptoms?',
+    options: [
+      { key: 'sob',     label: '😮‍💨 Shortness of breath' },
+      { key: 'sweat',   label: '💦 Cold sweats' },
+      { key: 'radiate', label: '➡️ Pain spreading to arm, neck or jaw' }
+    ]
+  },
+  neurological: {
+    question: 'Before we continue — are you currently experiencing any of the following?',
+    options: [
+      { key: 'weak',   label: '💪 Sudden weakness on one side' },
+      { key: 'speech', label: '🗣️ Sudden slurred speech' },
+      { key: 'worst',  label: '⚡ Worst headache of your life, sudden onset' }
+    ]
+  }
+};
+
+/* Mock doctor registry — static prototype data */
+const DOCTORS = [
+  { id: 'd1',  name: 'Dr. Naledi Khumalo',  specialty: 'card', specialtyLabel: 'Cardiologist',        location: 'Sandton, JHB',      distance: 4.2,  slots: ['Tue 09:00', 'Wed 14:30', 'Fri 11:15'] },
+  { id: 'd2',  name: 'Dr. James Pretorius', specialty: 'card', specialtyLabel: 'Cardiologist',        location: 'Rosebank, JHB',     distance: 7.8,  slots: ['Mon 15:00', 'Thu 10:45'] },
+  { id: 'd3',  name: 'Dr. Aisha Patel',    specialty: 'derm', specialtyLabel: 'Dermatologist',         location: 'Braamfontein, JHB', distance: 3.1,  slots: ['Tue 11:30', 'Wed 09:00', 'Fri 16:00'] },
+  { id: 'd4',  name: 'Dr. Lerato Mokoena',  specialty: 'derm', specialtyLabel: 'Dermatologist',        location: 'Fourways, JHB',     distance: 12.4, slots: ['Mon 08:30', 'Thu 13:15'] },
+  { id: 'd5',  name: 'Dr. Sipho Ndlovu',    specialty: 'gast', specialtyLabel: 'Gastroenterologist',   location: 'Parktown, JHB',    distance: 5.6,  slots: ['Tue 16:00', 'Fri 09:30'] },
+  { id: 'd6',  name: 'Dr. Fatima Desai',    specialty: 'gast', specialtyLabel: 'Gastroenterologist',   location: 'Bedfordview, JHB', distance: 9.3,  slots: ['Wed 10:00', 'Thu 15:45'] },
+  { id: 'd7',  name: 'Dr. Pieter van Wyk',  specialty: 'orth', specialtyLabel: 'Orthopaedic Surgeon',  location: 'Melrose Arch, JHB', distance: 6.0,  slots: ['Mon 13:00', 'Wed 08:00', 'Fri 14:00'] },
+  { id: 'd8',  name: 'Dr. Thandi Mbeki',    specialty: 'orth', specialtyLabel: 'Orthopaedic Surgeon',   location: 'Randburg, JHB',     distance: 10.2, slots: ['Tue 10:30', 'Thu 09:00'] },
+  { id: 'd9',  name: 'Dr. Mark Goldberg',    specialty: 'neur', specialtyLabel: 'Neurologist',         location: 'Houghton, JHB',     distance: 5.4,  slots: ['Mon 11:00', 'Wed 15:30'] },
+  { id: 'd10', name: 'Dr. Nomvula Zulu',    specialty: 'neur', specialtyLabel: 'Neurologist',          location: 'Sandton, JHB',      distance: 6.9,  slots: ['Tue 08:15', 'Fri 13:45'] },
+  { id: 'd11', name: 'Dr. Sarah Cohen',     specialty: 'psyc', specialtyLabel: 'Psychiatrist',         location: 'Greenside, JHB',   distance: 4.8,  slots: ['Mon 09:30', 'Wed 17:00'] },
+  { id: 'd12', name: 'Dr. Kagiso Rathebe',   specialty: 'psyc', specialtyLabel: 'Psychiatrist',         location: 'Rosebank, JHB',    distance: 7.1,  slots: ['Tue 12:00', 'Thu 16:30'] },
+  { id: 'd13', name: 'Dr. Bongani Sithole', specialty: 'gp',   specialtyLabel: 'General Practitioner', location: 'Braamfontein, JHB', distance: 2.3,  slots: ['Mon 08:00', 'Tue 08:00', 'Wed 08:00', 'Thu 08:00', 'Fri 08:00'] },
+  { id: 'd14', name: 'Dr. Anna Liebenberg', specialty: 'gp',   specialtyLabel: 'General Practitioner', location: 'Auckland Park, JHB', distance: 3.5, slots: ['Tue 14:00', 'Thu 11:00'] }
+];
+
+const SPECIALTY_TO_KEY = {
+  'Dermatologist': 'derm', 'Cardiologist': 'card', 'Gastroenterologist': 'gast',
+  'Orthopaedic Surgeon': 'orth', 'Neurologist': 'neur', 'Psychiatrist': 'psyc', 'General Practitioner': 'gp'
+};
+
+/* Doctor initials for generated avatars */
+const initials = name => name.replace('Dr. ', '').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+/* ── Booking store (localStorage persistence for the demo) ───────── */
+let bookings = JSON.parse(localStorage.getItem('medroute_bookings') || '[]');
+const saveBookings = () => localStorage.setItem('medroute_bookings', JSON.stringify(bookings));
+
+/* ── Chat helpers ───────────────────────────────────────────────── */
+const chatLog = document.getElementById('chat-log');
+const qrBox   = document.getElementById('quick-replies');
+
+function addMsg(text, who = 'bot', html = false) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + who;
+  if (html) div.innerHTML = text; else div.textContent = text;
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return div;
+}
+
+function botSay(text, html = false) {
+  return new Promise(resolve => {
+    const t = document.createElement('div');
+    t.className = 'typing';
+    t.innerHTML = '<span></span><span></span><span></span>';
+    chatLog.appendChild(t);
+    chatLog.scrollTop = chatLog.scrollHeight;
+    setTimeout(() => { t.remove(); addMsg(text, 'bot', html); resolve(); }, 550);
+  });
+}
+
+function showReplies(options) {
+  qrBox.innerHTML = '';
+  options.forEach(opt => {
+    const b = document.createElement('button');
+    b.className = 'qr-btn' + (opt.danger ? ' danger' : '') + (opt.ghost ? ' ghost' : '');
+    b.textContent = opt.label;
+    b.onclick = () => {
+      qrBox.innerHTML = '';
+      addMsg(opt.label, 'user');
+      opt.action();
+    };
+    qrBox.appendChild(b);
+  });
+}
+
+/* ── Triage progress stepper ────────────────────────────────────── */
+function updateStepper(step) {
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('st-' + i);
+    el.classList.toggle('done', i < step);
+    el.classList.toggle('on', i === step);
+  }
+}
+
+/* ── Triage state machine (UC-01) ───────────────────────────────── */
+let triage = null;
+
+function restartTriage() {
+  chatLog.innerHTML = '';
+  qrBox.innerHTML = '';
+  triage = { name: '', category: '', duration: '', severity: '' };
+  updateStepper(1);
+  greet();
+}
+
+async function greet() {
+  await botSay('Hello 👋 Welcome to MedRoute. I\'ll help you find the right specialist and book an appointment.');
+  await botSay('First — what should I call you? (first name only)');
+  const nameBox = document.createElement('div');
+  nameBox.className = 'name-box';
+  const input = document.createElement('input');
+  input.placeholder = 'Type your first name…';
+  nameBox.appendChild(input);
+  chatLog.appendChild(nameBox);
+  input.focus();
+  input.onkeydown = e => {
+    if (e.key === 'Enter' && input.value.trim()) {
+      triage.name = input.value.trim();
+      nameBox.remove();
+      addMsg(triage.name, 'user');
+      askCategory();
+    }
+  };
+}
+
+async function askCategory() {
+  updateStepper(1);
+  await botSay('Nice to meet you, ' + triage.name + '. What general area is bothering you most right now?');
+  showReplies(CATEGORIES.map(c => ({ label: c.label, action: () => selectCategory(c) })));
+}
+
+function selectCategory(cat) {
+  triage.category = cat;
+  const screen = EMERGENCY_SCREENS[cat.key];
+  if (screen) askEmergencyScreen(screen);
+  else { updateStepper(2); askDuration(); }
+}
+
+/* AF-01 — Emergency red-flag screening */
+async function askEmergencyScreen(screen) {
+  await botSay(screen.question, false);
+  const opts = screen.options.map(o => ({
+    label: o.label,
+    danger: true,
+    action: () => triggerEmergency(o.label)
+  }));
+  opts.push({ label: '✅ None of these', action: () => { updateStepper(2); askDuration(); } });
+  showReplies(opts);
+}
+
+function triggerEmergency(sign) {
+  updateStepper(0); /* halt — no progress on the emergency path */
+  const div = document.createElement('div');
+  div.className = 'msg emergency';
+  div.innerHTML =
+    '<strong>🚨 EMERGENCY — Please Stop</strong>' +
+    'You reported <b>' + sign + '</b>. This may be a medical emergency.<br/><br/>' +
+    '➡️ Call an ambulance now: <b>10177</b> (SA Ambulance) or <b>112</b> (mobile)<br/>' +
+    '➡️ Or go to your <b>nearest emergency room</b> immediately.<br/><br/>' +
+    'MedRoute does not book routine appointments when emergency symptoms are detected. Please seek urgent care first.';
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  addMsg('Triage halted for your safety. Once you are safe and well, you can restart triage for a separate, non-emergency concern.', 'system');
+  showReplies([{ label: '↺ Restart triage for a different concern', ghost: true, action: restartTriage }]);
+}
+
+async function askDuration() {
+  await botSay('Got it. How long has this been going on?');
+  showReplies([
+    { label: '🕐 Today',            action: () => { triage.duration = 'Today'; askSeverity(); } },
+    { label: '📅 A few days',       action: () => { triage.duration = 'A few days'; askSeverity(); } },
+    { label: '🗓️ Weeks or longer', action: () => { triage.duration = 'Weeks or longer'; askSeverity(); } }
+  ]);
+}
+
+async function askSeverity() {
+  updateStepper(3);
+  await botSay('How would you rate the severity?');
+  showReplies([
+    { label: '🟢 Mild',     action: () => { triage.severity = 'Mild'; showShortlist(); } },
+    { label: '🟡 Moderate', action: () => { triage.severity = 'Moderate'; showShortlist(); } },
+    { label: '🔴 Severe',   action: () => { triage.severity = 'Severe'; showShortlist(); } }
+  ]);
+}
+
+/* BR-1: only doctors whose specialty matches the triage outcome */
+async function showShortlist() {
+  updateStepper(4);
+  const specialtyKey = SPECIALTY_TO_KEY[triage.category.specialty];
+  const matches = DOCTORS.filter(d => d.specialty === specialtyKey)
+                        .sort((a, b) => a.distance - b.distance);
+
+  await botSay(
+    'Based on your answers — <b>' + triage.category.label.split('—')[0].trim() + '</b> symptoms, ' +
+    '<b>' + triage.duration.toLowerCase() + '</b>, <b>' + triage.severity.toLowerCase() + '</b> severity — ' +
+    'the right specialist to see is a <b>' + triage.category.specialty + '</b>. ' +
+    '(MedRoute recommends a specialty, never a diagnosis.)',
+    true
+  );
+  await botSay('Here are ' + matches.length + ' ' + triage.category.specialty + 's near you. Tap one to see their available slots:');
+
+  matches.forEach(d => {
+    const card = document.createElement('div');
+    card.className = 'doctor-card';
+    card.innerHTML =
+      '<div class="doc-avatar">' + initials(d.name) + '</div>' +
+      '<div class="info">' +
+        '<h4>' + d.name + ' — ' + d.specialtyLabel + '</h4>' +
+        '<small>📍 ' + d.location + ' · ' + d.distance + ' km away</small>' +
+      '</div>' +
+      '<div class="slot-pill">next: ' + d.slots[0] + '</div>';
+    card.onclick = () => selectDoctor(d);
+    chatLog.appendChild(card);
+  });
+  chatLog.scrollTop = chatLog.scrollHeight;
+  addMsg('Tap a doctor to request a slot · or restart triage from the top', 'system');
+}
+
+async function selectDoctor(doc) {
+  addMsg(doc.name + ' — ' + doc.slots.join(', '), 'user');
+  await botSay('Great choice. ' + doc.name + ' (' + doc.specialtyLabel + ', ' + doc.location + ') has these slots available:');
+  showReplies([
+    ...doc.slots.map(s => ({ label: '📅 ' + s, action: () => requestBooking(doc, s) })),
+    { label: '↺ Pick a different doctor', ghost: true, action: restartTriage }
+  ]);
+}
+
+async function requestBooking(doc, slot) {
+  updateStepper(5);
+  const bk = {
+    id: 'BK-' + Date.now().toString(36).toUpperCase(),
+    patientName: triage.name,
+    category: triage.category.label,
+    specialty: triage.category.specialty,
+    duration: triage.duration,
+    severity: triage.severity,
+    doctorId: doc.id,
+    doctorName: doc.name,
+    slot: slot,
+    status: 'Pending',
+    chain: 0,
+    referredFrom: null,
+    history: [{ event: 'Booking requested by patient', at: new Date().toLocaleString('en-ZA') }]
+  };
+  bookings.push(bk);
+  saveBookings();
+  renderBookings();
+
+  await botSay('✅ Your request has been sent to ' + doc.name + ' for <b>' + slot + '</b>.');
+  await botSay(
+    'Booking reference: <b>' + bk.id + '</b> — status: <b style="color:#c4b5fd">PENDING</b>. ' +
+    'Your doctor will either accept it or refer you to an even better-suited colleague. ' +
+    'Track it in "My Bookings" on the right, or switch to the Doctor Dashboard to see the marketplace in action.',
+    true
+  );
+  showReplies([
+    { label: '↺ Start a new triage', ghost: true, action: restartTriage },
+    { label: '👀 Switch to Doctor Dashboard', action: () => switchView('doctor') }
+  ]);
+}
+
+/* ── Patient bookings panel (BR-3) ───────────────────────────────── */
+function renderBookings() {
+  const box = document.getElementById('booking-list');
+  const mine = bookings.filter(b => b.patientName === (triage ? triage.name : ''));
+  const show = mine.length ? mine : bookings.slice(-5);
+  if (!show.length) {
+    box.innerHTML = '<div class="empty-note">No bookings yet.<br/>Complete a triage to request an appointment.</div>';
+    return;
+  }
+  box.innerHTML = show.slice().reverse().map(b => {
+    const chainNote = b.chain > 0
+      ? '<small class="warn-line">↪ Referred ' + b.chain + '× — now with ' + b.doctorName + '</small>'
+      : '';
+    const hist = b.history.map(h =>
+      '<small>• <b>' + h.event + '</b> <span style="opacity:.55">(' + h.at + ')</span></small>'
+    ).join('');
+    return '<div class="booking">' +
+      '<div class="bk-top">' +
+        '<h4>' + b.doctorName + '</h4>' +
+        '<span class="chip ' + b.status.toLowerCase() + '">' + b.status + '</span>' +
+      '</div>' +
+      '<small>' + b.specialty + ' · ' + b.slot + ' · Ref ' + b.id + '</small>' +
+      chainNote +
+      '<div class="bk-history">' + hist + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DOCTOR DASHBOARD — UC-02 (accept / refer)
+   ═══════════════════════════════════════════════════════════════════ */
+function switchView(view) {
+  document.getElementById('view-patient').classList.toggle('hidden', view !== 'patient');
+  document.getElementById('view-doctor').classList.toggle('hidden', view !== 'doctor');
+  document.getElementById('tab-patient').classList.toggle('active', view === 'patient');
+  document.getElementById('tab-doctor').classList.toggle('active', view === 'doctor');
+  if (view === 'doctor') { populateDoctorSelect(); renderDoctorRequests(); }
+}
+
+function populateDoctorSelect() {
+  const sel = document.getElementById('doctor-select');
+  const current = sel.value;
+  sel.innerHTML = DOCTORS.map(d =>
+    '<option value="' + d.id + '">' + d.name + ' — ' + d.specialtyLabel + '</option>'
+  ).join('');
+  if (current) sel.value = current;
+}
+
+function renderDoctorRequests() {
+  const docId = document.getElementById('doctor-select').value;
+  if (!docId) return;
+  const mine = bookings.filter(b => b.doctorId === docId && b.status === 'Pending');
+  const stats = {
+    pending:   mine.length,
+    confirmed: bookings.filter(b => b.doctorId === docId && b.status === 'Confirmed').length,
+    referrals: bookings.filter(b => b.doctorId === docId && b.chain > 0).length
+  };
+  document.getElementById('doc-stats').innerHTML =
+    '<div class="glass stat"><div class="num">' + stats.pending + '</div><div class="lbl">Pending</div></div>' +
+    '<div class="glass stat"><div class="num">' + stats.confirmed + '</div><div class="lbl">Confirmed</div></div>' +
+    '<div class="glass stat"><div class="num">' + stats.referrals + '</div><div class="lbl">Received via referral</div></div>';
+
+  const list = document.getElementById('request-list');
+  if (!mine.length) {
+    list.innerHTML = '<div class="glass req-list-empty"><div class="empty-note">📭 No pending requests for this doctor right now.<br/>Use the Patient Chat to create a booking, or select another doctor.</div></div>';
+    return;
+  }
+  list.innerHTML = '';
+  mine.forEach(bk => {
+    const card = document.createElement('div');
+    card.className = 'glass req-card';
+    const chainBlock = bk.chain >= 3
+      ? '<div class="chain-alert">⚠️ BR-5 alert: this booking has been referred ' + bk.chain + ' times. In production, an administrator would be notified beyond 3 referrals to prevent patients being passed around indefinitely.</div>'
+      : (bk.chain > 0
+          ? '<div class="ref-note">↪ Referred onward ' + bk.chain + '× — full triage context carried over.</div>'
+          : '');
+    const tags = bk.category.split('—')[0].trim();
+    card.innerHTML =
+      '<div class="req-head">' +
+        '<div>' +
+          '<h3>' + bk.patientName + ' — Booking ' + bk.id + '</h3>' +
+          '<div class="triage-tags">' +
+            '<span>' + tags + '</span>' +
+            '<span>' + bk.duration + '</span>' +
+            '<span>' + bk.severity + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<span class="chip pending">Pending</span>' +
+      '</div>' +
+      '<div class="slot-line">📅 Requested slot: ' + bk.slot + '</div>' +
+      '<div class="ref-note">Specialty match: ' + bk.specialty + (bk.chain > 0 ? ' · referral chain: ' + bk.chain : '') + '</div>' +
+      chainBlock +
+      '<div class="req-actions">' +
+        '<button class="btn btn-accept" onclick="acceptBooking(\'' + bk.id + '\')">✓ Accept</button>' +
+        '<button class="btn btn-refer" onclick="toggleReferBox(\'' + bk.id + '\')">↪ Refer to another specialist</button>' +
+      '</div>' +
+      '<div class="refer-box" id="refer-' + bk.id + '">' +
+        '<label>Choose target specialist (BR-4 — a new bookable record is always created):</label>' +
+        '<select id="refer-select-' + bk.id + '">' +
+          DOCTORS.filter(d => d.id !== docId).map(d =>
+            '<option value="' + d.id + '">' + d.name + ' — ' + d.specialtyLabel + ' (' + d.location + ')</option>'
+          ).join('') +
+        '</select>' +
+        '<button class="btn" onclick="referBooking(\'' + bk.id + '\')">Confirm referral →</button>' +
+      '</div>';
+    list.appendChild(card);
+  });
+}
+
+function toggleReferBox(id) {
+  document.getElementById('refer-' + id).classList.toggle('open');
+}
+
+/* Accept path — status → Confirmed */
+function acceptBooking(id) {
+  const bk = bookings.find(b => b.id === id);
+  if (!bk) return;
+  bk.status = 'Confirmed';
+  bk.history.push({ event: 'Accepted by ' + bk.doctorName, at: new Date().toLocaleString('en-ZA') });
+  saveBookings();
+  renderBookings();
+  renderDoctorRequests();
+}
+
+/* AF-02 — Refer path: mark Referred, create new Pending booking (BR-4) */
+function referBooking(id) {
+  const bk = bookings.find(b => b.id === id);
+  if (!bk) return;
+  const targetId = document.getElementById('refer-select-' + id).value;
+  const target = DOCTORS.find(d => d.id === targetId);
+  bk.status = 'Referred';
+  bk.history.push({ event: 'Referred by ' + bk.doctorName + ' to ' + target.name, at: new Date().toLocaleString('en-ZA') });
+  saveBookings();
+
+  const newBk = {
+    id: 'BK-' + Date.now().toString(36).toUpperCase(),
+    patientName: bk.patientName,
+    category: bk.category,
+    specialty: target.specialtyLabel,
+    duration: bk.duration,
+    severity: bk.severity,
+    doctorId: target.id,
+    doctorName: target.name,
+    slot: target.slots[0],
+    status: 'Pending',
+    chain: bk.chain + 1,
+    referredFrom: bk.id,
+    history: bk.history.concat([{
+      event: 'Referral received — triage context carried over. Now pending with ' + target.name + ' (' + target.slots[0] + ')',
+      at: new Date().toLocaleString('en-ZA')
+    }])
+  };
+  bookings.push(newBk);
+  saveBookings();
+  renderBookings();
+  renderDoctorRequests();
+}
+
+/* ── Boot ────────────────────────────────────────────────────────── */
+restartTriage();
+renderBookings();
+</script>
+</body>
+</html>
