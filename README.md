@@ -6,14 +6,15 @@ Building a functional chatbot prototype; prompt engineering.
 **Project:** MedRoute — conversational assistant that routes patients to the right medical specialist via guided symptom triage, and manages the resulting appointment request between patient and doctor — including doctor-to-doctor referral.
 
 **Context:** Clickatell 1-Month AI Bootcamp — Week 1 (AI Foundations & Chatbot Development)
-**Author:** Freddy Thosago · September 2026
+**Authors :** Freddy Thosago ;
+Matshepo Malatsi ;Deliwe Klaas;Avuyile Plaatjie;Xoliswa Dywili· September 2026
 **Live prototype:** https://tshepisofrominnostation.github.io/medroute-triage/
 
 ---
 
 ## What it is (and is NOT)
 
-MedRoute is structurally a **ride-hailing marketplace**: patients request, doctors accept / decline / redirect. It is **not a diagnostic tool**.
+MedRoute is structurally a **ride-hailing marketplace**: patients request, doctors accept / decline/redirect. It is **not a diagnostic tool**.
 
 - ✅ Classifies symptoms into a **specialty category**
 - ✅ Facilitates booking between patient and doctor (with referrals)
